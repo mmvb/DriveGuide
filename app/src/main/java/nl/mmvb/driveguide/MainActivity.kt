@@ -18,6 +18,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -43,11 +44,9 @@ import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.min
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import nl.mmvb.driveguide.ui.theme.DriveGuideTheme
@@ -55,6 +54,7 @@ import nl.mmvb.driveguide.ui.theme.OverpassFamily
 import nl.mmvb.driveguide.ui.theme.TrafficRed
 import kotlin.math.abs
 import kotlin.math.max
+import kotlin.math.min
 
 private const val TAG = "DriveGuide"
 
@@ -78,16 +78,13 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             DriveGuideTheme {
-                Surface(modifier = Modifier.fillMaxSize()) {
-                    LocationScreen(locationViewModel, modifier = Modifier
-                        .fillMaxSize()
-                        .safeDrawingPadding())
+                Surface {
+                    LocationScreen(locationViewModel)
                 }
             }
         }
 
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-//        setFullScreen()
 
         when {
             ContextCompat.checkSelfPermission(
@@ -107,20 +104,22 @@ class MainActivity : ComponentActivity() {
         val locationManager = getSystemService(Context.LOCATION_SERVICE) as LocationManager
 
         val locationListener = LocationListener { location ->
-            locationViewModel.updateSpeed(location.speed * 3.6)
+            locationViewModel.updateSpeed(location.speed * 3.6, location.speedAccuracyMetersPerSecond * 3.6)
             Log.d(TAG, "Speed: ${location.speed * 3.6}")
+            Log.d(TAG, "Speed Accuracy: ${location.speedAccuracyMetersPerSecond * 3.6}")
             Log.d(TAG, "Location: ${location.latitude} ${location.longitude}")
+            Log.d(TAG, "Horizontal Accuracy: ${location.accuracy}")
 
             val currentTime = System.currentTimeMillis()
             val distance = lastLocation?.distanceTo(location) ?: Float.MAX_VALUE
             val timeElapsed = currentTime - lastUpdateTime
 
-            if (first || (distance > 5 && timeElapsed > 5000) || timeElapsed > 30000) {
+            if (first || (distance > 10 && timeElapsed > 5000) || timeElapsed > 30000) {
                 first = false
                 lastLocation = location
                 lastUpdateTime = currentTime
 
-                locationViewModel.updateLocation(location.latitude, location.longitude)
+                locationViewModel.updateLocation(location.latitude, location.longitude, location.accuracy)
             }
         }
 
@@ -134,6 +133,7 @@ fun LocationScreen(locationViewModel: LocationViewModel, modifier: Modifier = Mo
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
 
     val speed by locationViewModel.speed.collectAsState()
+    //val speedAccuracy by locationViewModel.speed.collectAsState()
     val maxSpeed by locationViewModel.maxSpeed.collectAsState()
     val road by locationViewModel.road.collectAsState()
 
@@ -141,6 +141,7 @@ fun LocationScreen(locationViewModel: LocationViewModel, modifier: Modifier = Mo
 
     if (speed != null && maxSpeed != null) {
         val currentSpeed = speed!!
+        //val currentSpeedAccuracy = speedAccuracy!!
         val speedLimit = maxSpeed!!.toDouble()
 
         if (speed!! <= maxSpeed!!) {
@@ -156,6 +157,8 @@ fun LocationScreen(locationViewModel: LocationViewModel, modifier: Modifier = Mo
                 margin += 3.0
             }
 
+            //margin -= min(currentSpeedAccuracy/2.0, margin)
+
             color = if (currentSpeed >= speedLimit + margin) {
                 Color.Red
             } else {
@@ -163,11 +166,12 @@ fun LocationScreen(locationViewModel: LocationViewModel, modifier: Modifier = Mo
             }
         }
     }
-    Box(modifier = Modifier.fillMaxSize()) {
+
+    Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         if (isLandscape) {
             Row(
                 modifier = modifier
-                    .padding(vertical = 50.dp),
+                    .padding(vertical = 25.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Speed(
@@ -184,16 +188,15 @@ fun LocationScreen(locationViewModel: LocationViewModel, modifier: Modifier = Mo
                 Road(
                     road = road,
                     modifier = Modifier
-                        .weight(1f),
-                    landscape = isLandscape
+                        .weight(1f)
                 )
             }
         } else {
             Column(
                 modifier = modifier
                     .safeDrawingPadding()
-                    .padding(horizontal = 50.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+                    .padding(horizontal = 25.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Speed(
                     speed = speed,
@@ -209,7 +212,7 @@ fun LocationScreen(locationViewModel: LocationViewModel, modifier: Modifier = Mo
                 Road(
                     road = road,
                     modifier = Modifier
-                        .weight(1f)
+                        .weight(1f),
                 )
             }
         }
@@ -228,7 +231,7 @@ private fun scaleFactor(input: Double, target: Double, margin: Double): Float {
 @Composable
 fun LocationScreenPreview() {
     DriveGuideTheme(darkTheme = true) {
-        Surface() {
+        Surface {
             LocationScreen(LocationViewModel())
         }
     }
@@ -240,10 +243,10 @@ fun Speed(speed: Double?, modifier: Modifier = Modifier, color: Color = Color.Un
         modifier = modifier
     ) {
         val speedText = speed?.let { "%.0f".format(it) } ?: "-"
-        var fontSize = (min(maxHeight, maxWidth).value / (max(speedText.length, 2) / 1.5)).sp
+        var fontSize = (maxWidth.value / (2 / 1.2)).sp
         var fontWeight = FontWeight.Bold
         if (speedText.length > 2) {
-            fontSize = (min(maxHeight, maxWidth).value / (speedText.length / 1.5)).sp
+            fontSize = (maxWidth.value / (speedText.length / 1.5)).sp
             fontWeight = FontWeight.SemiBold
         }
         Text(
@@ -274,7 +277,7 @@ fun MaxSpeed(maxSpeed: Int?, modifier: Modifier = Modifier) {
     BoxWithConstraints(
         modifier = modifier
     ) {
-        val border = (min(maxHeight, maxWidth).value / 11).dp
+        val border = (min(maxHeight.value, maxWidth.value) / 11).dp
         BoxWithConstraints(
             modifier = Modifier
                 .align(Alignment.Center)
@@ -283,13 +286,13 @@ fun MaxSpeed(maxSpeed: Int?, modifier: Modifier = Modifier) {
                 .aspectRatio(1f)
                 .border(border, TrafficRed, CircleShape)
         ) {
-            var fontSize = (min(maxHeight, maxWidth).value / (max(maxSpeedText.length, 2) / 1.25)).sp
-            var letterSpacing = (-20).sp
+            var fontSize = (maxWidth.value / (max(maxSpeedText.length, 2) / 1.25)).sp
             var fontWeight = FontWeight.Bold
+            var letterSpacing = (-10).sp
             if (maxSpeedText.length > 2) {
-                fontSize = (min(maxHeight, maxWidth).value / (maxSpeedText.length / 1.5)).sp
-                letterSpacing = ((-25)/(maxSpeedText.length/2.5)).sp
+                fontSize = (maxWidth.value / (maxSpeedText.length / 1.5)).sp
                 fontWeight = FontWeight.SemiBold
+                letterSpacing = (-10).sp
             }
             Text(
                 text = maxSpeedText,
@@ -298,7 +301,7 @@ fun MaxSpeed(maxSpeed: Int?, modifier: Modifier = Modifier) {
                     fontSize = fontSize,
                     fontWeight = fontWeight,
                     letterSpacing = letterSpacing,
-                    color = Color.Black
+                    color = Color.Black,
                 ),
                 modifier = Modifier.align(Alignment.Center)
             )
@@ -316,19 +319,30 @@ fun MaxSpeedPreview() {
     }
 }
 
+@Preview(showBackground = false)
+@Composable
+fun MaxSpeedPreview2() {
+    DriveGuideTheme(darkTheme = true) {
+        Surface {
+            MaxSpeed(80)
+        }
+    }
+}
+
 @Composable
 fun RoadNumberSign(text: String, size: TextUnit, color: Color, background: Color, border: Boolean, modifier: Modifier = Modifier) {
     Box(modifier = modifier) {
         val shape = RoundedCornerShape((size.value / 6).dp)
 
         val baseModifier = Modifier
-            .align(Alignment.Center)
             .clip(shape)
             .background(background)
             .padding((size.value / 4).dp, 0.dp)
 
         val conditionalModifier = if (border) {
-            Modifier.border((size.value / 20).dp, Color.White, shape).then(baseModifier)
+            Modifier
+                .border((size.value / 20).dp, Color.White, shape)
+                .then(baseModifier)
         } else {
             baseModifier
         }
@@ -343,78 +357,36 @@ fun RoadNumberSign(text: String, size: TextUnit, color: Color, background: Color
                     fontSize = size,
                     fontWeight = FontWeight.SemiBold,
                     color = color
-                ),
-                modifier = Modifier.align(Alignment.Center)
+                )
             )
         }
     }
 }
 
 @Composable
-fun Road(road: Road?, modifier: Modifier = Modifier, landscape: Boolean = false) {
-    if (road != null) {
-        if (landscape) {
-            Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally) {
-                if (road.ref != null && road.ref.matches("""A\s?\d+""".toRegex())) {
-                    RoadNumberSign(
-                        text = road.ref,
-                        size = 56.sp,
-                        color = Color.White,
-                        background = Color(0xFFBB1E10),
-                        border = true,
-                        modifier = Modifier.weight(1f)
+fun Road(road: Road?, modifier: Modifier = Modifier) {
+    Column(modifier = modifier, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.SpaceEvenly) {
+        if (road != null) {
+            BoxWithConstraints(modifier = Modifier.padding(vertical = 5.dp)) {
+                val text = road.official_name ?: road.name ?: road.ref ?:  road.int_ref ?: "Unknown Road"
+                val fontSize = (maxWidth.value / (max(text.length, 2) / 1.6)).sp
+                Text(
+                    text = text,
+                    style = TextStyle(
+                        fontSize = fontSize,
+                        fontWeight = FontWeight.Bold
                     )
-                } else if (road.ref != null && road.ref.matches("""N\s?\d+""".toRegex())) {
-                    RoadNumberSign(
-                        text = road.ref,
-                        size = 56.sp,
-                        color = Color.Black,
-                        background = Color(0xFFFFC800),
-                        border = false,
-                        modifier = Modifier.weight(1f)
-                    )
-                } else {
-                    BoxWithConstraints(
-                        modifier = modifier
-                            .weight(1f),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        val text = road.ref ?: road.official_name ?: road.name
-                        ?: "Unknown Road"
-                        val fontSize = (maxWidth.value / (max(text.length, 2) / 1.4)).sp
-                        Text(
-                            text = text,
-                            style = TextStyle(
-                                fontSize = fontSize,
-                                fontWeight = FontWeight.Bold,
-                                textAlign = TextAlign.Center
-                            ),
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-                }
-
-                if (road.int_ref != null && road.int_ref.matches("""E\s?\d+""".toRegex())) {
-                    RoadNumberSign(
-                        text = road.int_ref,
-                        size = 56.sp,
-                        color = Color.White,
-                        background = Color(0xFF10BB19),
-                        border = true,
-                        modifier = Modifier.weight(1f)
-                    )
-                }
+                )
             }
-        } else {
-            Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
+
+            Row(modifier = Modifier.padding(vertical = 5.dp).fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                 if (road.ref != null && road.ref.matches("""A\s?\d+""".toRegex())) {
                     RoadNumberSign(
                         text = road.ref.replace(" ", ""),
                         size = 56.sp,
                         color = Color.White,
                         background = Color(0xFFBB1E10),
-                        border = true,
-                        modifier = Modifier.weight(1f)
+                        border = true
                     )
                 } else if (road.ref != null && road.ref.matches("""N\s?\d+""".toRegex())) {
                     RoadNumberSign(
@@ -422,27 +394,8 @@ fun Road(road: Road?, modifier: Modifier = Modifier, landscape: Boolean = false)
                         size = 56.sp,
                         color = Color.Black,
                         background = Color(0xFFFFC800),
-                        border = false,
-                        modifier = Modifier.weight(1f)
+                        border = false
                     )
-                } else {
-                    BoxWithConstraints(
-                        modifier = modifier
-                            .weight(1f)
-                    ) {
-                        val text = road.ref ?: road.official_name ?: road.name ?: road.int_ref
-                        ?: "Unknown Road"
-                        val fontSize = (maxWidth.value / (max(text.length, 2) / 1.4)).sp
-                        Text(
-                            text = text,
-                            style = TextStyle(
-                                fontSize = fontSize,
-                                fontWeight = FontWeight.Bold,
-                                textAlign = TextAlign.Center
-                            ),
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
                 }
 
                 if (road.int_ref != null && road.int_ref.matches("""E\s?\d+""".toRegex())) {
@@ -451,8 +404,7 @@ fun Road(road: Road?, modifier: Modifier = Modifier, landscape: Boolean = false)
                         size = 56.sp,
                         color = Color.White,
                         background = Color(0xFF10BB19),
-                        border = true,
-                        modifier = Modifier.weight(1f)
+                        border = true
                     )
                 }
             }
@@ -495,7 +447,7 @@ fun Road3Preview() {
 fun Road4Preview() {
     DriveGuideTheme(darkTheme = true) {
         Surface {
-            Road(road = Road(name = "Kerkstraat"), landscape = true)
+            Road(road = Road(name = "Kerkstraat"))
         }
     }
 }

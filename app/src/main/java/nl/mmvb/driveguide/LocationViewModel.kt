@@ -7,10 +7,14 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import java.time.LocalTime
 import java.time.format.DateTimeFormatter
+import kotlin.math.max
 
 class LocationViewModel : ViewModel() {
     private val _speed = MutableStateFlow<Double?>(null)
     val speed = _speed.asStateFlow()
+
+    private val _speedAccuracy = MutableStateFlow<Double?>(null)
+    val speedAccuracy = _speedAccuracy.asStateFlow()
 
     private val _maxSpeed = MutableStateFlow<Int?>(null)
     val maxSpeed = _maxSpeed.asStateFlow()
@@ -18,18 +22,60 @@ class LocationViewModel : ViewModel() {
     private val _road = MutableStateFlow<Road?>(null)
     val road = _road.asStateFlow()
 
-    fun updateSpeed(newSpeed: Double) {
+    fun updateSpeed(newSpeed: Double, newSpeedAccuracy: Double) {
         _speed.value = newSpeed
+        _speedAccuracy.value = newSpeedAccuracy
     }
 
-    fun updateLocation(latitude: Double, longitude: Double) {
+    fun updateLocation(latitude: Double, longitude: Double, accuracy: Float) {
         viewModelScope.launch {
             try {
+                val range = max(accuracy, 6.0f)
                 val query = """
                     [out:json];
                     (
-                        way(around:50,$latitude,$longitude)["maxspeed"];
-                        way(around:50,$latitude,$longitude)["maxspeed:conditional"];
+                        way(around:$range,$latitude,$longitude)["highway"="motorway"]["maxspeed"];
+                        way(around:$range,$latitude,$longitude)["highway"="motorway"]["maxspeed_conditional"];
+                        way(around:$range,$latitude,$longitude)["highway"="motorway_link"]["maxspeed"];
+                        way(around:$range,$latitude,$longitude)["highway"="motorway_link"]["maxspeed_conditional"];
+                        way(around:$range,$latitude,$longitude)["highway"="trunk"]["maxspeed"];
+                        way(around:$range,$latitude,$longitude)["highway"="trunk"]["maxspeed_conditional"];
+                        way(around:$range,$latitude,$longitude)["highway"="trunk_link"]["maxspeed"];
+                        way(around:$range,$latitude,$longitude)["highway"="trunk_link"]["maxspeed_conditional"];
+                        way(around:$range,$latitude,$longitude)["highway"="primary"]["maxspeed"];
+                        way(around:$range,$latitude,$longitude)["highway"="primary"]["maxspeed_conditional"];
+                        way(around:$range,$latitude,$longitude)["highway"="primary_link"]["maxspeed"];
+                        way(around:$range,$latitude,$longitude)["highway"="primary_link"]["maxspeed_conditional"];
+                        way(around:$range,$latitude,$longitude)["highway"="secondary"]["maxspeed"];
+                        way(around:$range,$latitude,$longitude)["highway"="secondary"]["maxspeed_conditional"];
+                        way(around:$range,$latitude,$longitude)["highway"="secondary_link"]["maxspeed"];
+                        way(around:$range,$latitude,$longitude)["highway"="secondary_link"]["maxspeed_conditional"];
+                        way(around:$range,$latitude,$longitude)["highway"="tertiary"]["maxspeed"];
+                        way(around:$range,$latitude,$longitude)["highway"="tertiary"]["maxspeed_conditional"];
+                        way(around:$range,$latitude,$longitude)["highway"="tertiary_link"]["maxspeed"];
+                        way(around:$range,$latitude,$longitude)["highway"="tertiary_link"]["maxspeed_conditional"];
+                        way(around:$range,$latitude,$longitude)["highway"="unclassified"]["maxspeed"];
+                        way(around:$range,$latitude,$longitude)["highway"="unclassified"]["maxspeed_conditional"];
+                        way(around:$range,$latitude,$longitude)["highway"="unclassified_link"]["maxspeed"];
+                        way(around:$range,$latitude,$longitude)["highway"="unclassified_link"]["maxspeed_conditional"];
+                        way(around:$range,$latitude,$longitude)["highway"="residential"]["maxspeed"];
+                        way(around:$range,$latitude,$longitude)["highway"="residential"]["maxspeed_conditional"];
+                        way(around:$range,$latitude,$longitude)["highway"="residential_link"]["maxspeed"];
+                        way(around:$range,$latitude,$longitude)["highway"="residential_link"]["maxspeed_conditional"];
+                        way(around:$range,$latitude,$longitude)["highway"="service"]["maxspeed"];
+                        way(around:$range,$latitude,$longitude)["highway"="service"]["maxspeed_conditional"];
+                        way(around:$range,$latitude,$longitude)["highway"="service_link"]["maxspeed"];
+                        way(around:$range,$latitude,$longitude)["highway"="service_link"]["maxspeed_conditional"];
+                        way(around:$range,$latitude,$longitude)["highway"="living_street"]["maxspeed"];
+                        way(around:$range,$latitude,$longitude)["highway"="living_street"]["maxspeed_conditional"];
+                        way(around:$range,$latitude,$longitude)["highway"="track"]["maxspeed"];
+                        way(around:$range,$latitude,$longitude)["highway"="track"]["maxspeed_conditional"];
+                        way(around:$range,$latitude,$longitude)["highway"="path"]["motor_vehicle"="yes"]["maxspeed"];
+                        way(around:$range,$latitude,$longitude)["highway"="path"]["motor_vehicle"="yes"]["maxspeed_conditional"];
+                        way(around:$range,$latitude,$longitude)["highway"="path"]["motorcar"="yes"]["maxspeed"];
+                        way(around:$range,$latitude,$longitude)["highway"="path"]["motorcar"="yes"]["maxspeed_conditional"];
+                        way(around:$range,$latitude,$longitude)["highway"="road"]["maxspeed"];
+                        way(around:$range,$latitude,$longitude)["highway"="road"]["maxspeed_conditional"];
                     );
                     out;
                 """.trimIndent()
